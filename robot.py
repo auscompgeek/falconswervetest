@@ -7,11 +7,15 @@ from wpimath.kinematics import SwerveDrive2Kinematics, ChassisSpeeds, SwerveModu
 from wpimath.geometry import Translation2d, Rotation2d
 
 from utilities.functions import constrain_angle, rescale_js
+from wpimath.controller import SimpleMotorFeedforwardMeters
 
 
 class SwerveModule:
+    DRIVE_GEAR_RATIO = 16 / 60
+    STEER_GEAR_RATIO = 1 / 60
 
-    GEAR_RATIO = 1 / 60
+    DRIVE_SENSOR_TO_METRES = DRIVE_GEAR_RATIO / 2048
+    METRES_TO_DRIVE_UNITS = 2048 / DRIVE_GEAR_RATIO
 
     def __init__(self, x: float, y: float, steer: CANSparkMax, drive: ctre.WPI_TalonFX):
         self.translation = Translation2d(x, y)
@@ -21,24 +25,35 @@ class SwerveModule:
         self.hall_effect = self.steer.getEncoder()
         # make the sensor's return value between 0 and 1
         self.encoder.setPositionConversionFactor(math.tau/3.3)
-        self.hall_effect.setPositionConversionFactor(self.GEAR_RATIO * math.tau)
+        self.encoder.setInverted(True)
+        self.hall_effect.setPositionConversionFactor(self.STEER_GEAR_RATIO * math.tau)
         self.hall_effect.setPosition(self.encoder.getPosition())
         self.steer_pid = steer.getPIDController()
         self.steer_pid.setFeedbackDevice(self.hall_effect)
 
         self.drive = drive
+        self.drive_ff = SimpleMotorFeedforwardMeters(kS=0.757, kV=1.3, kA=0.0672)
+
+        drive.config_kP(slotIdx=0, value=1e-16, timeoutMs=20)
     
     def get_angle(self):
         return self.hall_effect.getPosition()
 
     def get_speed(self):
-        return self.drive.getSelectedSensorVelocity()
+        return self.drive.getSelectedSensorVelocity() * self.DRIVE_SENSOR_TO_METRES * 10
     
     def set(self, desired_state: SwerveModuleState):
         self.steer_pid.setReference(desired_state.angle, ControlType.kSmartMotion)
         # rescale the speed target based on how close we are to being correctly aligned
         speed_target = desired_state.speed * math.cos(self.steer_pid.getLastError())
-        drive.set(ctre.ControlMode.MotionMagic, speed_target)
+        speed_volt = self.drive_ff.calculate(speed_target)
+        voltage = wpilib.RobotController.getInputVoltage()
+        self.drive.set(
+            ctre.ControlMode.Velocity,
+            speed_target * self.METRES_TO_DRIVE_UNITS / 10,
+            ctre.DemandType.ArbitraryFeedForward,
+            speed_volt / voltage,
+        )
 
     def rezero_hall_effect(self):
         self.hall_effect.setPosition(self.encoder.getPosition())
