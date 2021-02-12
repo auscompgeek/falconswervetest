@@ -42,8 +42,11 @@ class SwerveModule:
 
         drive.config_kP(slotIdx=0, value=2.21e-31, timeoutMs=20)
     
-    def get_angle(self) -> Rotation2d:
-        return Rotation2d(self.hall_effect.getPosition())
+    def get_angle(self) -> float:
+        return self.hall_effect.getPosition()
+
+    def get_rotation(self) -> Rotation2d:
+        return Rotation2d(self.get_angle())
 
     def get_speed(self):
         return self.drive.getSelectedSensorVelocity() * self.DRIVE_SENSOR_TO_METRES * 10
@@ -51,7 +54,7 @@ class SwerveModule:
     def set(self, desired_state: SwerveModuleState):
         self.steer_pid.setReference(desired_state.angle.radians(), ControlType.kSmartMotion)
         # rescale the speed target based on how close we are to being correctly aligned
-        error = self.get_angle() - desired_state.angle
+        error = self.get_rotation() - desired_state.angle
         speed_target = desired_state.speed * error.cos()
         speed_volt = self.drive_ff.calculate(speed_target)
         voltage = wpilib.RobotController.getInputVoltage()
@@ -61,6 +64,10 @@ class SwerveModule:
             ctre.DemandType.ArbitraryFeedForward,
             speed_volt / voltage,
         )
+
+    def stop(self) -> None:
+        self.drive.stopMotor()
+        self.steer.stopMotor()
 
     def rezero_hall_effect(self):
         self.hall_effect.setPosition(self.encoder.getPosition())
@@ -101,12 +108,17 @@ class MyRobot(wpilib.TimedRobot):
         joystick_vz = -rescale_js(
             self.joystick.getZ(), deadzone=0.2, exponential=20.0
         ) * self.spin_rate
-        chassis_speeds = ChassisSpeeds(joystick_vx, joystick_vy, joystick_vz)
 
-        
-        for state, module in zip(self.kinematics.toSwerveModuleStates(chassis_speeds), self.modules):
-            state = SwerveModuleState.optimize(state, module.get_angle())
-            module.set(state)
+        if joystick_vx or joystick_vy or joystick_vz:
+            chassis_speeds = ChassisSpeeds(joystick_vx, joystick_vy, joystick_vz)
+
+            for state, module in zip(self.kinematics.toSwerveModuleStates(chassis_speeds), self.modules):
+                state = SwerveModuleState.optimize(state, module.get_rotation())
+                module.set(state)
+
+        else:
+            for module in self.modules:
+                module.stop()
 
 if __name__ == "__main__":
     wpilib.run(MyRobot)
