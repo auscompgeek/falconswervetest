@@ -31,11 +31,11 @@ class SwerveModule:
         self.rezero_hall_effect()
         self.steer_pid = steer.getPIDController()
         self.steer_pid.setFeedbackDevice(self.hall_effect)
-        self.steer_pid.setP(8.51)
+        self.steer_pid.setP(1.85e-5)
         self.steer_pid.setD(0)
-        self.steer_pid.setFF(0)
-        self.steer_pid.setSmartMotionMaxAccel(math.tau)
-        self.steer_pid.setSmartMotionMaxVelocity(math.tau)
+        self.steer_pid.setFF(0.583 / 12)
+        self.steer_pid.setSmartMotionMaxVelocity(10)  # RPM
+        self.steer_pid.setSmartMotionMaxAccel(10)  # RPM/s
 
         self.drive = drive
         self.drive_ff = SimpleMotorFeedforwardMeters(kS=0.757, kV=1.3, kA=0.0672)
@@ -49,7 +49,7 @@ class SwerveModule:
         return self.drive.getSelectedSensorVelocity() * self.DRIVE_SENSOR_TO_METRES * 10
     
     def set(self, desired_state: SwerveModuleState):
-        self.steer_pid.setReference(desired_state.angle.radians(), ControlType.kPosition)
+        self.steer_pid.setReference(desired_state.angle.radians(), ControlType.kSmartMotion)
         # rescale the speed target based on how close we are to being correctly aligned
         error = self.get_angle() - desired_state.angle
         speed_target = desired_state.speed * error.cos()
