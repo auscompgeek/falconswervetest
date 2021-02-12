@@ -120,5 +120,9 @@ class MyRobot(wpilib.TimedRobot):
             for module in self.modules:
                 module.stop()
 
+    def robotPeriodic(self):
+        wpilib.SmartDashboard.putNumberArray("swerve_steer_pos", [module.get_angle() for module in self.modules])
+
+
 if __name__ == "__main__":
     wpilib.run(MyRobot)
