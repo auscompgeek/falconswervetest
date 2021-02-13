@@ -33,11 +33,12 @@ class SwerveModule:
         self.rezero_hall_effect()
         self.steer_pid = steer.getPIDController()
         self.steer_pid.setFeedbackDevice(self.hall_effect)
-        self.steer_pid.setP(1.85e-5 * 4)
-        self.steer_pid.setD(0)
-        self.steer_pid.setFF(0.583 / 12 / 2)
-        self.steer_pid.setSmartMotionMaxVelocity(10)  # RPM
-        self.steer_pid.setSmartMotionMaxAccel(10)  # RPM/s
+        self.steer_pid.setP(1.85e-5 * 8)
+        self.steer_pid.setI(1e-7)
+        self.steer_pid.setD(1e-3)
+        self.steer_pid.setFF(0.583 / 12 / 4)
+        self.steer_pid.setSmartMotionMaxVelocity(30)  # RPM
+        self.steer_pid.setSmartMotionMaxAccel(30)  # RPM/s
 
         self.drive = drive
         self.drive_ff = SimpleMotorFeedforwardMeters(kS=0.757, kV=1.3, kA=0.0672)
