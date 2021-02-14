@@ -27,28 +27,29 @@ class SwerveModule:
         self.encoder = self.steer.getAnalog()
         self.hall_effect = self.steer.getEncoder()
         # make the sensor's return value between 0 and 1
-        self.encoder.setPositionConversionFactor(math.tau/3.3)
+        self.encoder.setPositionConversionFactor(math.tau / 3.3)
         self.encoder.setInverted(steer_reversed)
         self.hall_effect.setPositionConversionFactor(self.STEER_GEAR_RATIO * math.tau)
         self.rezero_hall_effect()
         self.steer_pid = steer.getPIDController()
         self.steer_pid.setFeedbackDevice(self.hall_effect)
-        self.steer_pid.setP(1.85e-5 * 8)
-        self.steer_pid.setI(1e-7)
-        self.steer_pid.setD(1e-3)
-        self.steer_pid.setFF(0.583 / 12 / 4)
-        self.steer_pid.setSmartMotionMaxVelocity(60)  # RPM
-        self.steer_pid.setSmartMotionMaxAccel(30)  # RPM/s
+        self.steer_pid.setSmartMotionAllowedClosedLoopError(math.pi / 180)
+        self.steer_pid.setP(1.85e-5)
+        self.steer_pid.setI(0)
+        self.steer_pid.setD(0)
+        self.steer_pid.setFF(0.583 / 12 / math.tau * 60 * self.STEER_GEAR_RATIO)
+        self.steer_pid.setSmartMotionMaxVelocity(90)  # RPM
+        self.steer_pid.setSmartMotionMaxAccel(90)  # RPM/s
 
         self.drive = drive
         self.drive.setInverted(drive_reversed)
         self.drive_ff = SimpleMotorFeedforwardMeters(kS=0.757, kV=1.3, kA=0.0672)
 
         drive.config_kP(slotIdx=0, value=2.21e-31, timeoutMs=20)
-    
+
     def get_angle(self) -> float:
         return self.hall_effect.getPosition()
-    
+
     def get_enc_angle(self) -> float:
         return self.encoder.getPosition()
 
@@ -57,17 +58,18 @@ class SwerveModule:
 
     def get_speed(self):
         return self.drive.getSelectedSensorVelocity() * self.DRIVE_SENSOR_TO_METRES * 10
-    
+
     def set(self, desired_state: SwerveModuleState):
-        self.steer_pid.setReference(desired_state.angle.radians(), ControlType.kSmartMotion)
+        target_angle = self.unwrap(desired_state.angle.radians())
+        self.steer_pid.setReference(target_angle, ControlType.kSmartMotion)
         # rescale the speed target based on how close we are to being correctly aligned
-        error = self.get_rotation() - desired_state.angle
-        speed_target = desired_state.speed * error.cos()
-        speed_volt = self.drive_ff.calculate(speed_target)
+        error = self.get_angle() - target_angle
+        target_speed = desired_state.speed * math.cos(error) ** 2
+        speed_volt = self.drive_ff.calculate(target_speed)
         voltage = wpilib.RobotController.getInputVoltage()
         self.drive.set(
             ctre.ControlMode.Velocity,
-            speed_target * self.METRES_TO_DRIVE_UNITS / 10,
+            target_speed * self.METRES_TO_DRIVE_UNITS / 10,
             ctre.DemandType.ArbitraryFeedForward,
             speed_volt / voltage,
         )
@@ -80,10 +82,23 @@ class SwerveModule:
         print(self.encoder.getPosition())
         self.hall_effect.setPosition(self.encoder.getPosition())
 
+    def unwrap(self, theta: float) -> float:
+        """
+        Recieve an angle wrapped between -pi and pi and unwrap it based on the modules
+        current roatation
+        """
+        angle = self.get_angle()
+        rotations = int(angle / math.tau)
+        theta += rotations * math.tau
+        return theta
+
 
 class MyRobot(wpilib.TimedRobot):
     def robotInit(self):
         """Robot initialization function"""
+        self.gyro = wpilib.ADXRS450_Gyro()
+        self.gyro.reset()
+
         self.modules = [
             SwerveModule(0.8/2-0.125, 0.75/2-0.1, CANSparkMax(9, MotorType.kBrushless), ctre.WPI_TalonFX(3), steer_reversed=False, drive_reversed=True),
             SwerveModule(-0.8/2+0.125, -0.75/2+0.1, CANSparkMax(7, MotorType.kBrushless), ctre.WPI_TalonFX(5), steer_reversed=False, drive_reversed=True)
@@ -118,18 +133,23 @@ class MyRobot(wpilib.TimedRobot):
         ) * self.spin_rate
 
         if joystick_vx or joystick_vy or joystick_vz:
-            chassis_speeds = ChassisSpeeds(joystick_vx, joystick_vy, joystick_vz)
+            # Drive in field oriented mode unless button 6 is held
+            if not self.joystick.getRawButton(6):
+                rotation = self.gyro.getRotation2d()
+                chassis_speeds = ChassisSpeeds.fromFieldRelativeSpeeds(joystick_vx, joystick_vy, joystick_vz, rotation)
+            else:
+                chassis_speeds = ChassisSpeeds(joystick_vx, joystick_vy, joystick_vz)
 
             for state, module in zip(self.kinematics.toSwerveModuleStates(chassis_speeds), self.modules):
                 new_state = SwerveModuleState.optimize(state, module.get_rotation())
-                # new_state = state
                 module.set(new_state)
-                # if self.joystick.getTriggerPressed():
-                #     print(f"{state.angle} + {module.get_rotation()}-> {new_state.angle}")
         else:
             for module in self.modules:
                 module.stop()
-        
+
+        # Reset the heading when button 7 is pressed
+        if self.joystick.getRawButtonPressed(7):
+            self.gyro.reset()
 
     def robotPeriodic(self):
         wpilib.SmartDashboard.putNumberArray("swerve_steer_pos", [module.get_angle() for module in self.modules])
