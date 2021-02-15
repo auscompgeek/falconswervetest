@@ -35,12 +35,12 @@ class SwerveModule:
         self.steer_pid = steer.getPIDController()
         self.steer_pid.setFeedbackDevice(self.hall_effect)
         self.steer_pid.setSmartMotionAllowedClosedLoopError(math.pi / 180)
-        self.steer_pid.setP(1.85e-5)
+        self.steer_pid.setP(1.85e-6)
         self.steer_pid.setI(0)
         self.steer_pid.setD(0)
         self.steer_pid.setFF(0.583 / 12 / math.tau * 60 * self.STEER_GEAR_RATIO)
-        self.steer_pid.setSmartMotionMaxVelocity(120)  # RPM
-        self.steer_pid.setSmartMotionMaxAccel(90)  # RPM/s
+        self.steer_pid.setSmartMotionMaxVelocity(400)  # RPM
+        self.steer_pid.setSmartMotionMaxAccel(200)  # RPM/s
 
         self.drive = drive
         self.drive.setNeutralMode(ctre.NeutralMode.Brake)
@@ -63,12 +63,11 @@ class SwerveModule:
 
     def set(self, desired_state: SwerveModuleState):
         current_angle = self.get_angle()
-        target_displacement = self.min_angular_displacement(current_angle, desired_state.angle.radians())
+        target_displacement = constrain_angle(desired_state.angle.radians() - current_angle)
         target_angle = target_displacement + current_angle
         self.steer_pid.setReference(target_angle, ControlType.kSmartMotion)
         # rescale the speed target based on how close we are to being correctly aligned
-        error = self.get_angle() - target_angle
-        target_speed = desired_state.speed * math.cos(error) ** 2
+        target_speed = desired_state.speed * math.cos(target_displacement) ** 2
         speed_volt = self.drive_ff.calculate(target_speed)
         voltage = wpilib.RobotController.getInputVoltage()
         self.drive.set(
@@ -85,17 +84,6 @@ class SwerveModule:
     def rezero_hall_effect(self):
         print(self.encoder.getPosition())
         self.hall_effect.setPosition(self.encoder.getPosition())
-    
-    @staticmethod
-    def min_angular_displacement(current, target):
-        """Get the minimum (signed) angular displacement from `current` to `target` in radians."""
-        opp_target = constrain_angle(target + math.pi)
-        diff = constrain_angle(target - current)
-        opp_diff = constrain_angle(opp_target - current)
-
-        if abs(diff) < abs(opp_diff):
-            return diff
-        return opp_diff
 
 
 class MyRobot(wpilib.TimedRobot):
@@ -103,6 +91,7 @@ class MyRobot(wpilib.TimedRobot):
         """Robot initialization function"""
         self.gyro = wpilib.ADXRS450_Gyro()
         self.gyro.reset()
+        self.gyro.calibrate()
 
         self.modules = [
             SwerveModule(0.8/2-0.125, 0.75/2-0.1, CANSparkMax(9, MotorType.kBrushless), ctre.WPI_TalonFX(3), steer_reversed=False, drive_reversed=True),
