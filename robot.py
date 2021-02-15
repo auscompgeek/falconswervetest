@@ -77,7 +77,7 @@ class SwerveModule:
         target_angle = target_displacement + current_angle
         self.steer_pid.setReference(target_angle, ControlType.kSmartMotion)
         # rescale the speed target based on how close we are to being correctly aligned
-        target_speed = desired_state.speed * math.cos(target_displacement) ** 2
+        target_speed = desired_state.speed * math.cos(target_displacement) ** 4
         speed_volt = self.drive_ff.calculate(target_speed)
         voltage = wpilib.RobotController.getInputVoltage()
         self.drive.set(
