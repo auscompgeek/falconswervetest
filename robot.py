@@ -23,6 +23,7 @@ class SwerveModule:
 
         self.steer = steer
         self.steer.setInverted(steer_reversed)
+        self.steer.setIdleMode(CANSparkMax.IdleMode.kBrake)
         self.steer_reversed = steer_reversed
         self.encoder = self.steer.getAnalog()
         self.hall_effect = self.steer.getEncoder()
@@ -38,10 +39,11 @@ class SwerveModule:
         self.steer_pid.setI(0)
         self.steer_pid.setD(0)
         self.steer_pid.setFF(0.583 / 12 / math.tau * 60 * self.STEER_GEAR_RATIO)
-        self.steer_pid.setSmartMotionMaxVelocity(90)  # RPM
+        self.steer_pid.setSmartMotionMaxVelocity(120)  # RPM
         self.steer_pid.setSmartMotionMaxAccel(90)  # RPM/s
 
         self.drive = drive
+        self.drive.setNeutralMode(ctre.NeutralMode.Brake)
         self.drive.setInverted(drive_reversed)
         self.drive_ff = SimpleMotorFeedforwardMeters(kS=0.757, kV=1.3, kA=0.0672)
 
@@ -60,7 +62,9 @@ class SwerveModule:
         return self.drive.getSelectedSensorVelocity() * self.DRIVE_SENSOR_TO_METRES * 10
 
     def set(self, desired_state: SwerveModuleState):
-        target_angle = self.unwrap(desired_state.angle.radians())
+        current_angle = self.get_angle()
+        target_displacement = self.min_angular_displacement(current_angle, desired_state.angle.radians())
+        target_angle = target_displacement + current_angle
         self.steer_pid.setReference(target_angle, ControlType.kSmartMotion)
         # rescale the speed target based on how close we are to being correctly aligned
         error = self.get_angle() - target_angle
@@ -81,16 +85,17 @@ class SwerveModule:
     def rezero_hall_effect(self):
         print(self.encoder.getPosition())
         self.hall_effect.setPosition(self.encoder.getPosition())
+    
+    @staticmethod
+    def min_angular_displacement(current, target):
+        """Get the minimum (signed) angular displacement from `current` to `target` in radians."""
+        opp_target = constrain_angle(target + math.pi)
+        diff = constrain_angle(target - current)
+        opp_diff = constrain_angle(opp_target - current)
 
-    def unwrap(self, theta: float) -> float:
-        """
-        Recieve an angle wrapped between -pi and pi and unwrap it based on the modules
-        current roatation
-        """
-        angle = self.get_angle()
-        rotations = int(angle / math.tau)
-        theta += rotations * math.tau
-        return theta
+        if abs(diff) < abs(opp_diff):
+            return diff
+        return opp_diff
 
 
 class MyRobot(wpilib.TimedRobot):
