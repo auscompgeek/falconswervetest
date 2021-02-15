@@ -18,7 +18,15 @@ class SwerveModule:
     DRIVE_SENSOR_TO_METRES = DRIVE_GEAR_RATIO / 2048
     METRES_TO_DRIVE_UNITS = 2048 / DRIVE_GEAR_RATIO
 
-    def __init__(self, x: float, y: float, steer: CANSparkMax, drive: ctre.WPI_TalonFX, steer_reversed=False, drive_reversed=False):
+    def __init__(
+        self,
+        x: float,
+        y: float,
+        steer: CANSparkMax,
+        drive: ctre.WPI_TalonFX,
+        steer_reversed=False,
+        drive_reversed=False,
+    ):
         self.translation = Translation2d(x, y)
 
         self.steer = steer
@@ -63,7 +71,9 @@ class SwerveModule:
 
     def set(self, desired_state: SwerveModuleState):
         current_angle = self.get_angle()
-        target_displacement = constrain_angle(desired_state.angle.radians() - current_angle)
+        target_displacement = constrain_angle(
+            desired_state.angle.radians() - current_angle
+        )
         target_angle = target_displacement + current_angle
         self.steer_pid.setReference(target_angle, ControlType.kSmartMotion)
         # rescale the speed target based on how close we are to being correctly aligned
@@ -94,11 +104,27 @@ class MyRobot(wpilib.TimedRobot):
         self.gyro.calibrate()
 
         self.modules = [
-            SwerveModule(0.8/2-0.125, 0.75/2-0.1, CANSparkMax(9, MotorType.kBrushless), ctre.WPI_TalonFX(3), steer_reversed=False, drive_reversed=True),
-            SwerveModule(-0.8/2+0.125, -0.75/2+0.1, CANSparkMax(7, MotorType.kBrushless), ctre.WPI_TalonFX(5), steer_reversed=False, drive_reversed=True)
+            SwerveModule(
+                0.8 / 2 - 0.125,
+                0.75 / 2 - 0.1,
+                CANSparkMax(9, MotorType.kBrushless),
+                ctre.WPI_TalonFX(3),
+                steer_reversed=False,
+                drive_reversed=True,
+            ),
+            SwerveModule(
+                -0.8 / 2 + 0.125,
+                -0.75 / 2 + 0.1,
+                CANSparkMax(7, MotorType.kBrushless),
+                ctre.WPI_TalonFX(5),
+                steer_reversed=False,
+                drive_reversed=True,
+            ),
         ]
 
-        self.kinematics = SwerveDrive2Kinematics(self.modules[0].translation, self.modules[1].translation)
+        self.kinematics = SwerveDrive2Kinematics(
+            self.modules[0].translation, self.modules[1].translation
+        )
 
         self.joystick = wpilib.Joystick(0)
 
@@ -116,25 +142,34 @@ class MyRobot(wpilib.TimedRobot):
         # in order to make their response exponential, and to set a dead zone -
         # which just means if it is under a certain value a 0 will be sent
         # TODO: Tune these constants for whatever robot they are on
-        joystick_vx = -rescale_js(
-            self.joystick.getY(), deadzone=0.1, exponential=1.5
-        ) * 4 * throttle
-        joystick_vy = -rescale_js(
-            self.joystick.getX(), deadzone=0.1, exponential=1.5
-        ) * 4 * throttle
-        joystick_vz = -rescale_js(
-            self.joystick.getZ(), deadzone=0.2, exponential=20.0
-        ) * self.spin_rate
+        joystick_vx = (
+            -rescale_js(self.joystick.getY(), deadzone=0.1, exponential=1.5)
+            * 4
+            * throttle
+        )
+        joystick_vy = (
+            -rescale_js(self.joystick.getX(), deadzone=0.1, exponential=1.5)
+            * 4
+            * throttle
+        )
+        joystick_vz = (
+            -rescale_js(self.joystick.getZ(), deadzone=0.2, exponential=20.0)
+            * self.spin_rate
+        )
 
         if joystick_vx or joystick_vy or joystick_vz:
             # Drive in field oriented mode unless button 6 is held
             if not self.joystick.getRawButton(6):
                 rotation = self.gyro.getRotation2d()
-                chassis_speeds = ChassisSpeeds.fromFieldRelativeSpeeds(joystick_vx, joystick_vy, joystick_vz, rotation)
+                chassis_speeds = ChassisSpeeds.fromFieldRelativeSpeeds(
+                    joystick_vx, joystick_vy, joystick_vz, rotation
+                )
             else:
                 chassis_speeds = ChassisSpeeds(joystick_vx, joystick_vy, joystick_vz)
 
-            for state, module in zip(self.kinematics.toSwerveModuleStates(chassis_speeds), self.modules):
+            for state, module in zip(
+                self.kinematics.toSwerveModuleStates(chassis_speeds), self.modules
+            ):
                 new_state = SwerveModuleState.optimize(state, module.get_rotation())
                 module.set(new_state)
         else:
@@ -146,8 +181,12 @@ class MyRobot(wpilib.TimedRobot):
             self.gyro.reset()
 
     def robotPeriodic(self):
-        wpilib.SmartDashboard.putNumberArray("swerve_steer_pos", [module.get_angle() for module in self.modules])
-        wpilib.SmartDashboard.putNumberArray("swerve_encoder_pos", [module.get_enc_angle() for module in self.modules])
+        wpilib.SmartDashboard.putNumberArray(
+            "swerve_steer_pos", [module.get_angle() for module in self.modules]
+        )
+        wpilib.SmartDashboard.putNumberArray(
+            "swerve_encoder_pos", [module.get_enc_angle() for module in self.modules]
+        )
 
 
 if __name__ == "__main__":
