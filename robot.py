@@ -40,7 +40,9 @@ class SwerveModule:
         self.encoder.setInverted(steer_reversed)
         self.hall_effect.setPositionConversionFactor(self.STEER_GEAR_RATIO * math.tau)
         self.rezero_hall_effect()
+
         self.steer_pid = steer.getPIDController()
+
         self.steer_pid.setFeedbackDevice(self.hall_effect)
         self.steer_pid.setSmartMotionAllowedClosedLoopError(math.pi / 180)
         self.steer_pid.setP(1.85e-6)
@@ -49,6 +51,12 @@ class SwerveModule:
         self.steer_pid.setFF(0.583 / 12 / math.tau * 60 * self.STEER_GEAR_RATIO)
         self.steer_pid.setSmartMotionMaxVelocity(400)  # RPM
         self.steer_pid.setSmartMotionMaxAccel(200)  # RPM/s
+
+        self.steer_pid.setP(8.51 / 10, slotID=1)
+        self.steer_pid.setI(0, slotID=1)
+        self.steer_pid.setD(0, slotID=1)
+        self.steer_pid.setFF(0, slotID=1)
+        steer.setClosedLoopRampRate(1)
 
         self.drive = drive
         self.drive.setNeutralMode(ctre.NeutralMode.Brake)
@@ -69,13 +77,17 @@ class SwerveModule:
     def get_speed(self):
         return self.drive.getSelectedSensorVelocity() * self.DRIVE_SENSOR_TO_METRES * 10
 
-    def set(self, desired_state: SwerveModuleState):
+    def set(self, desired_state: SwerveModuleState, steer_smart_motion: bool = False):
         current_angle = self.get_angle()
         target_displacement = constrain_angle(
             desired_state.angle.radians() - current_angle
         )
         target_angle = target_displacement + current_angle
-        self.steer_pid.setReference(target_angle, ControlType.kSmartMotion)
+        if steer_smart_motion:
+            self.steer_pid.setReference(target_angle, ControlType.kSmartMotion)
+        else:
+            self.steer_pid.setReference(target_angle, ControlType.kPosition, pidSlot=1)
+
         # rescale the speed target based on how close we are to being correctly aligned
         target_speed = desired_state.speed * math.cos(target_displacement) ** 4
         speed_volt = self.drive_ff.calculate(target_speed)
