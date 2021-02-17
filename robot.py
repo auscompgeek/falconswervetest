@@ -52,11 +52,11 @@ class SwerveModule:
         self.steer_pid.setSmartMotionMaxVelocity(400)  # RPM
         self.steer_pid.setSmartMotionMaxAccel(200)  # RPM/s
 
-        self.steer_pid.setP(8.51 / 10, slotID=1)
+        self.steer_pid.setP(0.762, slotID=1)
         self.steer_pid.setI(0, slotID=1)
         self.steer_pid.setD(0, slotID=1)
         self.steer_pid.setFF(0, slotID=1)
-        steer.setClosedLoopRampRate(1)
+        steer.setClosedLoopRampRate(1 / 3)
 
         self.drive = drive
         self.drive.setNeutralMode(ctre.NeutralMode.Brake)
